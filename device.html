@@ -1,0 +1,405 @@
+<html>
+    <head>
+        <meta http-equiv='Content-Type' content='text/html;charset=iso-8859-1'>
+        <style type='text/css'>
+            input[type='text'  ] { width:220px; font-size:16px; }
+            input[type='submit'] { width:100px; font-size:16px; }
+            h1 { font-size:32px; }
+            td { font-size:18px; }
+        </style>
+        <title>cgi test</title>
+    </head>
+    <body>
+        <h1>cgi test</h1><hr/>
+        <table cellpadding='8px'>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>setCameraPowerStatus:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='setCameraPowerStatus'/>
+                    <input type='radio' name='VALUES' value='on' checked/> on&nbsp;&nbsp;&nbsp;&nbsp;
+                    <input type='radio' name='VALUES' value='off' /> off&nbsp;&nbsp;&nbsp;
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            <form action='/device.cgi' method='post'>
+                <input type='hidden' name='CMD_ID' value='getCameraPowerStatus'/>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>setPowerLedStatus:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='setPowerLedStatus'/>
+                    <input type='radio' name='VALUES' value='enable' checked/> enable
+                    <input type='radio' name='VALUES' value='disable' /> disable
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            <form action='/device.cgi' method='post'>
+                <input type='hidden' name='CMD_ID' value='getPowerLedStatus'/>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>setMicStatus:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='setMicStatus'/>
+                    <input type='radio' name='VALUES' value='enable' checked/> enable
+                    <input type='radio' name='VALUES' value='disable' /> disable
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            <form action='/device.cgi' method='post'>
+                <input type='hidden' name='CMD_ID' value='getMicStatus'/>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>setInfraredLedStatus:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='setInfraredLedStatus'/>
+                    <input type='radio' name='VALUES' value='enable' checked/> enable
+                    <input type='radio' name='VALUES' value='disable' /> disable
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            <form action='/device.cgi' method='post'>
+                <input type='hidden' name='CMD_ID' value='getInfraredLedStatus'/>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>setflipHorizontal:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='setflipHorizontal'/>
+                    <input type='radio' name='VALUES' value='enable' checked/> enable
+                    <input type='radio' name='VALUES' value='disable' /> disable
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            <form action='/device.cgi' method='post'>
+                <input type='hidden' name='CMD_ID' value='getflipHorizontal'/>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>setflipVertical:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='setflipVertical'/>
+                    <input type='radio' name='VALUES' value='enable' checked/> enable
+                    <input type='radio' name='VALUES' value='disable' /> disable
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            <form action='/device.cgi' method='post'>
+                <input type='hidden' name='CMD_ID' value='getflipVertical'/>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>setResolution:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='setResolution'/>
+                    <input type='radio' name='VALUES' value='L' /> L &nbsp;
+                    <input type='radio' name='VALUES' value='M' checked/> M &nbsp;
+                    <input type='radio' name='VALUES' value='H' /> H &nbsp;
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            <form action='/device.cgi' method='post'>
+                <input type='hidden' name='CMD_ID' value='getResolution'/>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>setMotion:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='setMotion'/>
+                   <input type='radio' name='VALUES' value='enable' checked/> enable
+                    <input type='radio' name='VALUES' value='disable' /> disable
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            <form action='/device.cgi' method='post'>
+                <input type='hidden' name='CMD_ID' value='getMotion'/>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>setMotionSensitivity:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='setMotionSensitivity'/>
+                    <input type='radio' name='VALUES' value='L' /> L &nbsp;
+                    <input type='radio' name='VALUES' value='M' checked/> M &nbsp;
+                    <input type='radio' name='VALUES' value='H' /> H &nbsp;
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            <form action='/device.cgi' method='post'>
+                <input type='hidden' name='CMD_ID' value='getMotionSensitivity'/>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>setMotionFrequence:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='setMotionFrequence'/>
+                    <input type='radio' name='VALUES' value='L' /> L &nbsp;
+                    <input type='radio' name='VALUES' value='M' checked/> M &nbsp;
+                    <input type='radio' name='VALUES' value='H' /> H &nbsp;
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            <form action='/device.cgi' method='post'>
+                <input type='hidden' name='CMD_ID' value='getMotionFrequence'/>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>setMotionTime:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='setMotionTime'/>
+                    <input type='text' name='VALUES' value='00:24' />
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            <form action='/device.cgi' method='post'>
+                <input type='hidden' name='CMD_ID' value='getMotionTime'/>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>setRtmpPush:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='setRtmpPush'/>
+                    <input type='radio' name='VALUES' value='enable' checked/> enable
+                    <input type='radio' name='VALUES' value='disable' /> disable
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            <form action='/device.cgi' method='post'>
+                <input type='hidden' name='CMD_ID' value='getRtmpPush'/>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>setRtmpURL:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='setRtmpURL'/>
+                    <input type='text' name='VALUES' value='rtmp://192.168.0.148:1983/live/test' />
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            <form action='/device.cgi' method='post'>
+                <input type='hidden' name='CMD_ID' value='getRtmpURL'/>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>getSDCardStatus:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='getSDCardStatus'/>
+                </td>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>getFileList:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='getFileList'/>
+                    <input type='text' style='width:67px' name='orderBy' value='timedesc'/>
+                    <input type='text' style='width:67px' name='start' value='0'/>
+                    <input type='text' style='width:67px' name='count' value='100'/>
+                </td>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>FormatSDCard:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='formatting'/>
+                </td>
+                <td><input type='submit' value='format'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>getFirewareVersion:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='getFirewareVersion'/>
+                </td>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>setFirewareUpgrade:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='setFirewareUpgrade'/>
+                    <input type='text' name='VALUES' value='https://rockcarry.github.io/ffota/files/ipcam-update.tar.gz' />
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>getWirelessInfo:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='getWirelessInfo'/>
+                </td>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>getDeviceInfo:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='getDeviceInfo'/>
+                </td>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>move_up:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='move_up'/>
+                    <input type='text' name='time' value='1000'/>
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>move_down:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='move_down'/>
+                    <input type='text' name='time' value='1000'/>
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>move_left:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='move_left'/>
+                    <input type='text' name='time' value='1000'/>
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>move_right:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='move_right'/>
+                    <input type='text' name='time' value='1000'/>
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>setLightingMode:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='setLightingMode'/>
+                    <input type='radio' name='VALUES' value='Auto' checked /> Auto&nbsp;
+                    <input type='radio' name='VALUES' value='Manual' /> Manual&nbsp;
+                    <input type='radio' name='VALUES' value='Timer' /> Timer&nbsp;
+                    <input type='radio' name='VALUES' value='D2D' /> D2D&nbsp;
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            <form action='/device.cgi' method='post'>
+                <input type='hidden' name='CMD_ID' value='getLightingMode'/>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>setLightingTime:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='setLightingTime'/>
+                    <input type='text' name='VALUES' value='30'/>
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            <form action='/device.cgi' method='post'>
+                <input type='hidden' name='CMD_ID' value='getLightingTime'/>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>setLightsensorSensitive:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='setLightsensorSensitive'/>
+                    <input type='radio' name='VALUES' value='L' /> L &nbsp;
+                    <input type='radio' name='VALUES' value='M' checked/> M &nbsp;
+                    <input type='radio' name='VALUES' value='H' /> H &nbsp;
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            <form action='/device.cgi' method='post'>
+                <input type='hidden' name='CMD_ID' value='getLightsensorSensitive'/>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>setLightingLevel:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='setLightingLevel'/>
+                    <input type='text' name='VALUES' value='50'/>
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            <form action='/device.cgi' method='post'>
+                <input type='hidden' name='CMD_ID' value='getLightingLevel'/>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>setTimer:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='setTimer'/>
+                    <input type='text' style='width:105px' name='startTime' value='18:00'/>
+                    <input type='text' style='width:105px' name='endTime' value='20:00'/>
+                </td>
+                <td><input type='submit' value='set'/></td>
+            </form>
+            <form action='/device.cgi' method='post'>
+                <input type='hidden' name='CMD_ID' value='getTimerInfo'/>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+            <tr>
+            <form action='/device.cgi' method='post'>
+                <td>getLightingCamInfo:</td>
+                <td>
+                    <input type='hidden' name='CMD_ID' value='getLightingCamInfo'/>
+                </td>
+                <td><input type='submit' value='get'/></td>
+            </form>
+            </tr>
+        </table>
+    </body>
+</html>

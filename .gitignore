@@ -1,0 +1,6 @@
+!.gitignore
+*.a
+*.o
+*.exe
+!/ffhttpd.exe
+
