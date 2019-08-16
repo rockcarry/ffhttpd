@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
 #include <netinet/in.h>
 #define  closesocket close
 #define  SOCKET      int
@@ -172,7 +173,7 @@ typedef struct {
     #define CONN_STATUS_EXIT    (1 << 1)
     int             status;
 } CONN;
-static CONN g_conn_pool[FFHTTPD_MAX_CONNECTION] = {0};
+static CONN g_conn_pool[FFHTTPD_MAX_CONNECTION] = {{0}};
 
 static void* handle_http_request(void *argv)
 {
@@ -286,11 +287,22 @@ static void conn_pool_run(CONN *pool, int n, SOCKET connfd)
 static int g_exit_server = 0;
 static void sig_handler(int sig)
 {
+    struct sockaddr_in server_addr;
+    SOCKET client_fd;
     printf("sig_handler %d\n", sig); fflush(stdout);
     switch (sig) {
     case SIGINT:
     case SIGTERM:
         g_exit_server = 1;
+        client_fd = socket(AF_INET, SOCK_STREAM, 0);
+        if (client_fd != -1) {
+            server_addr.sin_family      = AF_INET;
+            server_addr.sin_port        = htons(FFHTTPD_SERVER_PORT);
+            server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+            if (connect(client_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == 0) {
+                closesocket(client_fd);
+            }
+        }
         break;
     }
 }
