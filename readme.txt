@@ -12,7 +12,7 @@
 1. 极小的内存占用，无动态内存分配
 2. 基于线程池的多线程模式
 3. 支持 GET/POST/HEAD 请求
-3. 支持 GET 请求的 range bytes 方式
+4. 支持 GET 请求的 range bytes 方式
 
 
 
