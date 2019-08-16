@@ -225,7 +225,7 @@ static void* handle_http_request(void *argv)
             if (!partial) {
                 snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head1, get_content_type(request_path), datasize);
             } else {
-                snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head2, range_start, range_end, datasize, get_content_type(request_path), range_end - range_start + 1);
+                snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head2, range_start, range_end, datasize, get_content_type(request_path), datasize ? range_end - range_start + 1 : 0);
             }
             printf("response:\n%s\n", sendbuf); fflush(stdout);
             send(conn->fd, sendbuf, (int)strlen(sendbuf), 0);
