@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <pthread.h>
-#include <semaphore.h>
+#include <signal.h>
 
 #ifdef WIN32
 #include <winsock2.h>
@@ -232,7 +232,7 @@ static void* handle_http_request(void *argv)
         } else if (strcmp(request_type, "POST") == 0) {
             snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head1, "text/plain", 0);
             send(conn->fd, sendbuf, (int)strlen(sendbuf), 0);
-//          printf("\nhttp post request\npath = %s, args = %s, data length = %d, data buffer = %s\n\n", request_path, url_args, datasize, request_data);
+//          printf("\nhttp post request\npath = %s, args = %s, data length = %d, data buffer = %s\n\n", request_path, url_args, datasize, request_data); fflush(stdout);
         }
 
 next:   pthread_mutex_lock(&conn->mutex);
@@ -283,6 +283,18 @@ static void conn_pool_run(CONN *pool, int n, SOCKET connfd)
     }
 }
 
+static int g_exit_server = 0;
+static void sig_handler(int sig)
+{
+    printf("sig_handler %d\n", sig); fflush(stdout);
+    switch (sig) {
+    case SIGINT:
+    case SIGTERM:
+        g_exit_server = 1;
+        break;
+    }
+}
+
 int main(void)
 {
     struct sockaddr_in server_addr;
@@ -297,29 +309,32 @@ int main(void)
     }
 #endif
 
+    signal(SIGINT , sig_handler);
+    signal(SIGTERM, sig_handler);
+
     server_addr.sin_family      = AF_INET;
     server_addr.sin_port        = htons(FFHTTPD_SERVER_PORT);
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0) {
-        printf("failed to open socket !\n");
+        printf("failed to open socket !\n"); fflush(stdout);
         exit(1);
     }
 
     if (bind(server_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
-        printf("failed to bind !\n");
+        printf("failed to bind !\n"); fflush(stdout);
         exit(1);
     }
 
     if (listen(server_fd, FFHTTPD_MAX_CONNECTION) == -1) {
-        printf("failed to listen !\n");
+        printf("failed to listen !\n"); fflush(stdout);
         exit(1);
     }
 
     addrlen = sizeof(client_addr);
     conn_pool_init(g_conn_pool, FFHTTPD_MAX_CONNECTION);
-    while (1) {
+    while (!g_exit_server) {
         conn_fd = accept(server_fd, (struct sockaddr*)&client_addr, (void*)&addrlen);
         if (conn_fd != -1) conn_pool_run(g_conn_pool, FFHTTPD_MAX_CONNECTION, conn_fd);
         else printf("failed to accept !\n");
