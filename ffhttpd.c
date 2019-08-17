@@ -203,7 +203,7 @@ static void* handle_http_request(void *argv)
 {
     THEADPOOL *tp = (THEADPOOL*)argv;
     int    range_start, range_end, datasize, partial;
-    char  *request_line, *request_header, *request_data = NULL, *request_type = NULL, *request_path = NULL, *url_args = NULL;
+    char  *request_header, *request_data = NULL, *request_type = NULL, *request_path = NULL, *url_args = NULL;
     char   recvbuf[1024], sendbuf[1024];
     SOCKET conn_fd;
 
@@ -212,7 +212,6 @@ static void* handle_http_request(void *argv)
         recvbuf[datasize < sizeof(recvbuf) ? datasize : sizeof(recvbuf) - 1] = 0;
         printf("request :\n%s\n", recvbuf); fflush(stdout);
 
-        request_line   = recvbuf;
         request_header = strstr(recvbuf, "\r\n");
         if (request_header) {
             request_header[0] = 0;
