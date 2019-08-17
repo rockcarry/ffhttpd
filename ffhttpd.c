@@ -24,16 +24,14 @@
 static char* strlwr(char *s)
 {
     char *p = s;
-    while (*p) {
-        *p += *p > 'A' && *p < 'Z' ? 'a' - 'A' : 0;
-         p ++;
-    }
+    while (*p) { *p += *p > 'A' && *p < 'Z' ? 'a' - 'A' : 0; p ++; }
     return s;
 }
 #endif
 
-#define FFHTTPD_SERVER_PORT     8080
-#define FFHTTPD_MAX_CONNECTION  10
+#define FFHTTPD_SERVER_PORT      8080
+#define FFHTTPD_MAX_CONNECTIONS  16
+#define FFHTTPD_MAX_WORK_THREADS FFHTTPD_MAX_CONNECTIONS
 
 static char *g_ffhttpd_head1 =
 "HTTP/1.1 200 OK\r\n"
@@ -139,6 +137,7 @@ static void parse_range_datasize(char *str, int *partial, int *start, int *end, 
     *start = 0;
     *end   = 0x7FFFFFFF;
     *size  = 0;
+    if (!str) return;
     range_start = strstr(str, "range");
     if (range_start && (range_end = strstr(range_start, "\r\n"))) {
         if (strstr(range_start, ":") && strstr(range_start, "bytes") && (range_start = strstr(range_start, "="))) {
@@ -165,31 +164,51 @@ static void parse_range_datasize(char *str, int *partial, int *start, int *end, 
 }
 
 typedef struct {
-    SOCKET          fd;
-    pthread_t       thread;
+    int    head;
+    int    tail;
+    int    size; // size == -1 means exit
+    SOCKET conns[FFHTTPD_MAX_CONNECTIONS];
     pthread_mutex_t mutex;
     pthread_cond_t  cond;
-    #define CONN_STATUS_WORKING (1 << 0)
-    #define CONN_STATUS_EXIT    (1 << 1)
-    int             status;
-} CONN;
-static CONN g_conn_pool[FFHTTPD_MAX_CONNECTION] = {{0}};
+    pthread_t       threads[FFHTTPD_MAX_WORK_THREADS];
+} THEADPOOL;
+
+static SOCKET threadpool_dequeue(THEADPOOL *tp)
+{
+    SOCKET fd = -1;
+    pthread_mutex_lock(&tp->mutex);
+    while (tp->size == 0) pthread_cond_wait(&tp->cond, &tp->mutex);
+    if (tp->size != -1) {
+        fd = tp->conns[tp->head++ % FFHTTPD_MAX_CONNECTIONS];
+        tp->size--;
+        pthread_cond_signal(&tp->cond);
+    }
+    pthread_mutex_unlock(&tp->mutex);
+    return fd;
+}
+
+static void threadpool_enqueue(THEADPOOL *tp, SOCKET fd)
+{
+    pthread_mutex_lock(&tp->mutex);
+    while (tp->size == FFHTTPD_MAX_CONNECTIONS) pthread_cond_wait(&tp->cond, &tp->mutex);
+    if (tp->size != -1) {
+        tp->conns[tp->tail++ % FFHTTPD_MAX_CONNECTIONS] = fd;
+        tp->size++;
+        pthread_cond_signal(&tp->cond);
+    }
+    pthread_mutex_unlock(&tp->mutex);
+}
 
 static void* handle_http_request(void *argv)
 {
-    CONN *conn = (CONN*)argv;
-    int   range_start, range_end, datasize, partial, exitflag = 0;
-    char *request_line, *request_header, *request_data = NULL, *request_type = NULL, *request_path = NULL, *url_args = NULL;
-    char  recvbuf[1024], sendbuf[1024];
+    THEADPOOL *tp = (THEADPOOL*)argv;
+    int    range_start, range_end, datasize, partial;
+    char  *request_line, *request_header, *request_data = NULL, *request_type = NULL, *request_path = NULL, *url_args = NULL;
+    char   recvbuf[1024], sendbuf[1024];
+    SOCKET conn_fd;
 
-    while (!exitflag) {
-        pthread_mutex_lock(&conn->mutex);
-        while (!(conn->status & (CONN_STATUS_EXIT|CONN_STATUS_WORKING))) pthread_cond_wait(&conn->cond, &conn->mutex);
-        if (conn->status & CONN_STATUS_EXIT) exitflag = 1;
-        pthread_mutex_unlock(&conn->mutex);
-        if (exitflag) goto next;
-
-        datasize = recv(conn->fd, recvbuf, sizeof(recvbuf), 0);
+    while ((conn_fd = threadpool_dequeue(tp)) != -1) {
+        datasize = recv(conn_fd, recvbuf, sizeof(recvbuf), 0);
         recvbuf[datasize < sizeof(recvbuf) ? datasize : sizeof(recvbuf) - 1] = 0;
         printf("request :\n%s\n", recvbuf); fflush(stdout);
 
@@ -205,11 +224,14 @@ static void* handle_http_request(void *argv)
                 request_data   += 4;
             }
         }
-        request_type = request_line;
-        request_path = strstr(request_line, " ");
-        if (request_path) *request_path++ = 0;
-        request_path = strstr(request_path, "/");
-        if (request_path++) {
+        request_type = recvbuf;
+        request_path = strstr(recvbuf, " ");
+        if (request_path) {
+           *request_path++ = 0;
+            request_path   = strstr(request_path, "/");
+        }
+        if (request_path) {
+            request_path  += 1;
             url_args = strstr(request_path, " ");
             if (url_args) *url_args   = 0;
             url_args = strstr(request_path, "?");
@@ -228,60 +250,37 @@ static void* handle_http_request(void *argv)
                 snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head2, range_start, range_end, datasize, get_content_type(request_path), datasize ? range_end - range_start + 1 : 0);
             }
             printf("response:\n%s\n", sendbuf); fflush(stdout);
-            send(conn->fd, sendbuf, (int)strlen(sendbuf), 0);
-            if (strcmp(request_type, "GET") == 0) send_file_data(conn->fd, request_path, range_start, range_end);
+            send(conn_fd, sendbuf, (int)strlen(sendbuf), 0);
+            if (strcmp(request_type, "GET") == 0) send_file_data(conn_fd, request_path, range_start, range_end);
         } else if (strcmp(request_type, "POST") == 0) {
             snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head1, "text/plain", 0);
-            send(conn->fd, sendbuf, (int)strlen(sendbuf), 0);
+            send(conn_fd, sendbuf, (int)strlen(sendbuf), 0);
 //          printf("\nhttp post request\npath = %s, args = %s, data length = %d, data buffer = %s\n\n", request_path, url_args, datasize, request_data); fflush(stdout);
         }
-
-next:   pthread_mutex_lock(&conn->mutex);
-        if (conn->fd != -1) {
-            closesocket(conn->fd);
-            conn->fd = -1;
-        }
-        conn->status &= ~CONN_STATUS_WORKING;
-        pthread_mutex_unlock(&conn->mutex);
+        closesocket(conn_fd);
     }
     return NULL;
 }
 
-static void conn_pool_init(CONN *pool, int n)
+static void threadpool_init(THEADPOOL *tp)
 {
     int i;
-    for (i=0; i<n; i++) {
-        pthread_mutex_init(&pool[i].mutex, NULL);
-        pthread_cond_init (&pool[i].cond , NULL);
-        pthread_create(&pool[i].thread, NULL, handle_http_request, &pool[i]);
-    }
+    memset(tp, 0, sizeof(THEADPOOL));
+    pthread_mutex_init(&tp->mutex, NULL);
+    pthread_cond_init (&tp->cond , NULL);
+    for (i=0; i<FFHTTPD_MAX_WORK_THREADS; i++) pthread_create(&tp->threads[i], NULL, handle_http_request, tp);
 }
 
-static void conn_pool_free(CONN *pool, int n)
+static void threadpool_free(THEADPOOL *tp)
 {
     int i;
-    for (i=0; i<n; i++) {
-        pthread_mutex_lock(&pool[i].mutex);
-        pool[i].status |= CONN_STATUS_EXIT;
-        pthread_cond_signal(&pool[i].cond);
-        pthread_mutex_unlock(&pool[i].mutex);
-        pthread_join(pool[i].thread, NULL);
-    }
-}
-
-static void conn_pool_run(CONN *pool, int n, SOCKET connfd)
-{
-    int flag = 0, i;
-    for (i=0; i<n&&!flag; i++) {
-        pthread_mutex_lock(&pool[i].mutex);
-        if (!(pool[i].status & CONN_STATUS_WORKING)) {
-            pool[i].status |= CONN_STATUS_WORKING;
-            pool[i].fd = connfd;
-            pthread_cond_signal(&pool[i].cond);
-            flag = 1;
-        }
-        pthread_mutex_unlock(&pool[i].mutex);
-    }
+    pthread_mutex_lock(&tp->mutex);
+    tp->size = -1;
+    pthread_cond_signal(&tp->cond);
+    pthread_mutex_unlock(&tp->mutex);
+    for (i=0; i<FFHTTPD_MAX_WORK_THREADS; i++) pthread_join(tp->threads[i], NULL);
+    pthread_mutex_destroy(&tp->mutex);
+    pthread_cond_destroy (&tp->cond );
 }
 
 static int g_exit_server = 0;
@@ -311,8 +310,9 @@ int main(void)
 {
     struct sockaddr_in server_addr;
     struct sockaddr_in client_addr;
-    SOCKET server_fd, conn_fd;
-    int    addrlen;
+    SOCKET    server_fd, conn_fd;
+    int       addrlen = sizeof(client_addr);
+    THEADPOOL thread_pool;
 
 #ifdef WIN32
     WSADATA wsaData;
@@ -339,19 +339,18 @@ int main(void)
         exit(1);
     }
 
-    if (listen(server_fd, FFHTTPD_MAX_CONNECTION) == -1) {
+    if (listen(server_fd, FFHTTPD_MAX_CONNECTIONS) == -1) {
         printf("failed to listen !\n"); fflush(stdout);
         exit(1);
     }
 
-    addrlen = sizeof(client_addr);
-    conn_pool_init(g_conn_pool, FFHTTPD_MAX_CONNECTION);
+    threadpool_init(&thread_pool);
     while (!g_exit_server) {
         conn_fd = accept(server_fd, (struct sockaddr*)&client_addr, (void*)&addrlen);
-        if (conn_fd != -1) conn_pool_run(g_conn_pool, FFHTTPD_MAX_CONNECTION, conn_fd);
+        if (conn_fd != -1) threadpool_enqueue(&thread_pool, conn_fd);
         else printf("failed to accept !\n");
     }
-    conn_pool_free(g_conn_pool, FFHTTPD_MAX_CONNECTION);
+    threadpool_free(&thread_pool);
 
     closesocket(server_fd);
 #ifdef WIN32
