@@ -275,7 +275,7 @@ static void threadpool_free(THEADPOOL *tp)
     int i;
     pthread_mutex_lock(&tp->mutex);
     tp->size = -1;
-    pthread_cond_signal(&tp->cond);
+    pthread_cond_broadcast(&tp->cond);
     pthread_mutex_unlock(&tp->mutex);
     for (i=0; i<FFHTTPD_MAX_WORK_THREADS; i++) pthread_join(tp->threads[i], NULL);
     pthread_mutex_destroy(&tp->mutex);
