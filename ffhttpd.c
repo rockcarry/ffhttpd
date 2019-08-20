@@ -49,6 +49,22 @@ static char *g_ffhttpd_head2 =
 "Content-Length: %d\r\n"
 "Connection: close\r\n\r\n";
 
+static char *g_ffhttpd_head3 =
+"HTTP/1.1 404 Not Found\r\n"
+"Server: ffhttpd/1.0.0\r\n"
+"Content-Type: text/html\r\n"
+"Content-Length: %d\r\n"
+"Connection: close\r\n\r\n";
+
+static char *g_html_404_page =
+"<html>\r\n"
+"<head><title>404 Not Found</title></head>\r\n"
+"<body>\r\n"
+"<center><h1>404 Not Found</h1></center>\r\n"
+"<hr><center>ffhttpd/1.0.0</center>\r\n"
+"</body>\r\n"
+"</html>\r\n";
+
 static char *g_content_type_list[][2] = {
     { ".asf" , "video/x-ms-asf"                 },
     { ".avi" , "video/avi"                      },
@@ -102,7 +118,8 @@ static void get_file_range_size(char *file, int *start, int *end, int *size)
         if (*start < 0) *start = *size + *start;
         if (*end >= *size) *end = *size - 1;
     } else {
-        *start = *end = *size = 0;
+        *start = *end = 0;
+        *size  = -1;
     }
 }
 
@@ -243,14 +260,24 @@ static void* handle_http_request(void *argv)
 
         if (strcmp(request_type, "GET") == 0 || strcmp(request_type, "HEAD") == 0) {
             get_file_range_size(request_path, &range_start, &range_end, &datasize);
-            if (!partial) {
-                snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head1, get_content_type(request_path), datasize);
+            if (datasize != -1) {
+                if (!partial) {
+                    snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head1, get_content_type(request_path), datasize);
+                } else {
+                    snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head2, range_start, range_end, datasize, get_content_type(request_path), datasize ? range_end - range_start + 1 : 0);
+                }
             } else {
-                snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head2, range_start, range_end, datasize, get_content_type(request_path), datasize ? range_end - range_start + 1 : 0);
+                snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head3, strlen(g_html_404_page));
             }
             printf("response:\n%s\n", sendbuf); fflush(stdout);
             send(conn_fd, sendbuf, (int)strlen(sendbuf), 0);
-            if (strcmp(request_type, "GET") == 0) send_file_data(conn_fd, request_path, range_start, range_end);
+            if (strcmp(request_type, "GET") == 0) {
+                if (datasize != -1) {
+                    send_file_data(conn_fd, request_path, range_start, range_end);
+                } else {
+                    send(conn_fd, g_html_404_page, (int)strlen(g_html_404_page), 0);
+                }
+            }
         } else if (strcmp(request_type, "POST") == 0) {
             snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head1, "text/plain", 0);
             send(conn_fd, sendbuf, (int)strlen(sendbuf), 0);
