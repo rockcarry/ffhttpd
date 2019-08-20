@@ -256,7 +256,7 @@ static void* handle_http_request(void *argv)
         }
 
         parse_range_datasize(request_header, &partial, &range_start, &range_end, &datasize);
-        printf("request_type: %s, request_path: %s, url_args: %s, request_data: %s\n", request_type, request_path, url_args, request_data); fflush(stdout);
+//      printf("request_type: %s, request_path: %s, url_args: %s, request_data: %s\n", request_type, request_path, url_args, request_data); fflush(stdout);
 
         if (strcmp(request_type, "GET") == 0 || strcmp(request_type, "HEAD") == 0) {
             get_file_range_size(request_path, &range_start, &range_end, &datasize);
