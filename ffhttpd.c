@@ -4,8 +4,14 @@
 #include <pthread.h>
 #include <signal.h>
 
+typedef int (*PFN_CGI_MAIN)(char *request_type, char *request_path, char *url_args, char *request_data, int request_size, char *page_buf, int pbuf_size);
+
 #ifdef WIN32
 #include <winsock2.h>
+#include <windows.h>
+#define dlopen(a, b) LoadLibrary(a)
+#define dlclose(a)   FreeLibrary(a)
+#define dlsym(a, b)  GetProcAddress(a, b)
 #ifdef MSVC
 #pragma comment(lib, "ws2_32.lib")
 #pragma warning(disable:4996)
@@ -15,6 +21,7 @@
 #else
 #include <unistd.h>
 #include <errno.h>
+#include <dlfcn.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -30,7 +37,7 @@ static char* strlwr(char *s)
 #endif
 
 #define FFHTTPD_SERVER_PORT      8080
-#define FFHTTPD_MAX_CONNECTIONS  16
+#define FFHTTPD_MAX_CONNECTIONS  8
 #define FFHTTPD_MAX_WORK_THREADS FFHTTPD_MAX_CONNECTIONS
 
 static char *g_ffhttpd_head1 =
@@ -216,16 +223,27 @@ static void threadpool_enqueue(THEADPOOL *tp, SOCKET fd)
     pthread_mutex_unlock(&tp->mutex);
 }
 
+static void send_404_page(int fd, char *sendbuf, int buflen)
+{
+    snprintf(sendbuf, buflen, g_ffhttpd_head3, strlen(g_html_404_page));
+    send(fd, sendbuf, (int)strlen(sendbuf), 0);
+    send(fd, g_html_404_page, (int)strlen(g_html_404_page), 0);
+}
+
 static void* handle_http_request(void *argv)
 {
     THEADPOOL *tp = (THEADPOOL*)argv;
-    int    range_start, range_end, datasize, partial;
+    int    range_start, range_end, datasize, partial, len;
     char  *request_header, *request_data = NULL, *request_type = NULL, *request_path = NULL, *url_args = NULL;
-    char   recvbuf[1024], sendbuf[1024];
+    char   recvbuf[1024], sendbuf[1024], cgibuf[8196];
     SOCKET conn_fd;
 
     while ((conn_fd = threadpool_dequeue(tp)) != -1) {
         datasize = recv(conn_fd, recvbuf, sizeof(recvbuf), 0);
+        if (datasize == 0) {
+            printf("client close http connection !\n"); fflush(stdout);
+            goto _next;
+        }
         recvbuf[datasize < sizeof(recvbuf) ? datasize : sizeof(recvbuf) - 1] = 0;
         printf("request :\n%s\n", recvbuf); fflush(stdout);
 
@@ -256,34 +274,49 @@ static void* handle_http_request(void *argv)
         }
 
         parse_range_datasize(request_header, &partial, &range_start, &range_end, &datasize);
-//      printf("request_type: %s, request_path: %s, url_args: %s, request_data: %s\n", request_type, request_path, url_args, request_data); fflush(stdout);
+        printf("request_type: %s, request_path: %s, url_args: %s, datasize: %d, request_data: %s\n", request_type, request_path, url_args, datasize, request_data); fflush(stdout);
 
-        if (strcmp(request_type, "GET") == 0 || strcmp(request_type, "HEAD") == 0) {
-            get_file_range_size(request_path, &range_start, &range_end, &datasize);
-            if (datasize != -1) {
+        len = request_path ? strlen(request_path) : 0;
+        if (len > 4 && strcmp(request_path + len - 4, ".cgi") == 0) {
+            void *dl = NULL;
+            snprintf(cgibuf, sizeof(cgibuf), "./%s", request_path);
+            dl = dlopen(cgibuf, RTLD_LAZY);
+            if (!dl) {
+                send_404_page(conn_fd, sendbuf, sizeof(sendbuf));
+            } else {
+                PFN_CGI_MAIN cgimain  = (PFN_CGI_MAIN)dlsym(dl, "cgimain");
+                int          pagesize = 0;
+                if (cgimain) {
+                    pagesize = cgimain(request_type, request_path, url_args, request_data, datasize, cgibuf, sizeof(cgibuf));
+                }
+                dlclose(dl);
+                snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head1, "text/html", pagesize);
+                send(conn_fd, sendbuf, (int)strlen(sendbuf), 0);
+                send(conn_fd, cgibuf , pagesize, 0);
+            }
+        } else {
+            if (strcmp(request_type, "GET") == 0 || strcmp(request_type, "HEAD") == 0) {
+                get_file_range_size(request_path, &range_start, &range_end, &datasize);
+                if (datasize == -1) {
+                    send_404_page(conn_fd, sendbuf, sizeof(sendbuf));
+                    goto _next;
+                }
                 if (!partial) {
                     snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head1, get_content_type(request_path), datasize);
                 } else {
                     snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head2, range_start, range_end, datasize, get_content_type(request_path), datasize ? range_end - range_start + 1 : 0);
                 }
-            } else {
-                snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head3, strlen(g_html_404_page));
-            }
-            printf("response:\n%s\n", sendbuf); fflush(stdout);
-            send(conn_fd, sendbuf, (int)strlen(sendbuf), 0);
-            if (strcmp(request_type, "GET") == 0) {
-                if (datasize != -1) {
+                printf("response:\n%s\n", sendbuf); fflush(stdout);
+                send(conn_fd, sendbuf, (int)strlen(sendbuf), 0);
+                if (strcmp(request_type, "GET") == 0) {
                     send_file_data(conn_fd, request_path, range_start, range_end);
-                } else {
-                    send(conn_fd, g_html_404_page, (int)strlen(g_html_404_page), 0);
                 }
+            } else if (strcmp(request_type, "POST") == 0) {
+                snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head1, "text/plain", 0);
+                send(conn_fd, sendbuf, (int)strlen(sendbuf), 0);
             }
-        } else if (strcmp(request_type, "POST") == 0) {
-            snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head1, "text/plain", 0);
-            send(conn_fd, sendbuf, (int)strlen(sendbuf), 0);
-//          printf("\nhttp post request\npath = %s, args = %s, data length = %d, data buffer = %s\n\n", request_path, url_args, datasize, request_data); fflush(stdout);
         }
-        closesocket(conn_fd);
+_next:  closesocket(conn_fd);
     }
     return NULL;
 }
@@ -334,8 +367,7 @@ static void sig_handler(int sig)
 
 int main(void)
 {
-    struct sockaddr_in server_addr;
-    struct sockaddr_in client_addr;
+    struct sockaddr_in server_addr, client_addr;
     SOCKET    server_fd, conn_fd;
     int       addrlen = sizeof(client_addr);
     THEADPOOL thread_pool;
