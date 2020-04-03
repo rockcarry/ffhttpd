@@ -20,7 +20,8 @@ static char *html = "\
 </html>\n\
 ";
 
-int cgimain(char *request_type, char *request_path, char *url_args, char *request_data, int request_size, char *page_buf, int pbuf_size)
+int cgimain(char *request_type, char *request_path, char *url_args, char *request_data, int request_size,
+            char *content_type, int ctypebuf_size, char *page_buf, int pbuf_size)
 {
     return snprintf(page_buf, pbuf_size, html);
 }

@@ -4,7 +4,7 @@
 #include <pthread.h>
 #include <signal.h>
 
-typedef int (*PFN_CGI_MAIN)(char *request_type, char *request_path, char *url_args, char *request_data, int request_size, char *page_buf, int pbuf_size);
+typedef int (*PFN_CGI_MAIN)(char *request_type, char *request_path, char *url_args, char *request_data, int request_size, char *content_type, int ctypebuf_size, char *page_buf, int pbuf_size);
 
 #ifdef WIN32
 #include <winsock2.h>
@@ -41,7 +41,7 @@ static char* strlwr(char *s)
 #define FFHTTPD_MAX_WORK_THREADS FFHTTPD_MAX_CONNECTIONS
 
 static char *g_ffhttpd_head1 =
-"HTTP/1.1 200 OK\r\n"
+"HTTP/1.1 %s\r\n"
 "Server: ffhttpd/1.0.0\r\n"
 "Accept-Ranges: bytes\r\n"
 "Content-Type: %s\r\n"
@@ -56,14 +56,7 @@ static char *g_ffhttpd_head2 =
 "Content-Length: %d\r\n"
 "Connection: close\r\n\r\n";
 
-static char *g_ffhttpd_head3 =
-"HTTP/1.1 404 Not Found\r\n"
-"Server: ffhttpd/1.0.0\r\n"
-"Content-Type: text/html\r\n"
-"Content-Length: %d\r\n"
-"Connection: close\r\n\r\n";
-
-static char *g_html_404_page =
+static char *g_404_page =
 "<html>\r\n"
 "<head><title>404 Not Found</title></head>\r\n"
 "<body>\r\n"
@@ -187,6 +180,33 @@ static void parse_range_datasize(char *str, int *partial, int *start, int *end, 
     *partial = !!range_start;
 }
 
+static char* parse_params(const char *str, const char *key, char *val, int len)
+{
+    char *p = (char*)strstr(str, key);
+    int   i;
+
+    *val = '\0';
+    if (!p) return NULL;
+    p += strlen(key);
+    if (*p == '\0') return NULL;
+
+    while (*p) {
+        if (*p != ':' && *p != ' ') break;
+        else p++;
+    }
+
+    for (i=0; i<len; i++) {
+        if (*p == '\\') {
+            p++;
+        } else if (*p == '\r' || *p == '\n') {
+            break;
+        }
+        val[i] = *p++;
+    }
+    val[i] = val[len-1] = '\0';
+    return val;
+}
+
 typedef struct {
     int    head;
     int    tail;
@@ -223,40 +243,35 @@ static void threadpool_enqueue(THEADPOOL *tp, SOCKET fd)
     pthread_mutex_unlock(&tp->mutex);
 }
 
-static void send_404_page(int fd, char *sendbuf, int buflen)
-{
-    snprintf(sendbuf, buflen, g_ffhttpd_head3, strlen(g_html_404_page));
-    send(fd, sendbuf, (int)strlen(sendbuf), 0);
-    send(fd, g_html_404_page, (int)strlen(g_html_404_page), 0);
-}
-
 static void* handle_http_request(void *argv)
 {
     THEADPOOL *tp = (THEADPOOL*)argv;
-    int    range_start, range_end, datasize, partial, len;
-    char  *request_header, *request_data = NULL, *request_type = NULL, *request_path = NULL, *url_args = NULL;
-    char   recvbuf[1024], sendbuf[1024], cgibuf[8196];
+    int    length, request_datasize, range_start, range_end, range_size, partial;
+    char   recvbuf[1024], sendbuf[1024], cgibuf[8196], content_type[64];
+    char  *request_type = NULL, *request_path = NULL, *url_args = NULL, *request_head = NULL, *request_data = NULL;
     SOCKET conn_fd;
 
     while ((conn_fd = threadpool_dequeue(tp)) != -1) {
-        datasize = recv(conn_fd, recvbuf, sizeof(recvbuf), 0);
-        if (datasize == 0) {
-            printf("client close http connection !\n"); fflush(stdout);
+        length = recv(conn_fd, recvbuf, sizeof(recvbuf)-1, 0);
+        if (length <= 0) {
+            printf("recv error or client close http connection !\n"); fflush(stdout);
             goto _next;
         }
-        recvbuf[datasize < sizeof(recvbuf) ? datasize : sizeof(recvbuf) - 1] = 0;
-        printf("request :\n%s\n", recvbuf); fflush(stdout);
+        recvbuf[length] = '\0';
+//      printf("request :\n%s\n", recvbuf); fflush(stdout);
 
-        request_header = strstr(recvbuf, "\r\n");
-        if (request_header) {
-            request_header[0] = 0;
-            request_header   += 2;
-            strlwr(request_header);
-            request_data = strstr(request_header, "\r\n\r\n");
+        request_head = strstr(recvbuf, "\r\n");
+        if (request_head) {
+            request_head[0] = 0;
+            request_head   += 2;
+            strlwr(request_head);
+            request_data = strstr(request_head, "\r\n\r\n");
             if (request_data) {
                 request_data[0] = 0;
                 request_data   += 4;
             }
+            parse_params(request_head, "content-length", sendbuf, sizeof(sendbuf));
+            request_datasize = atoi(sendbuf);
         }
         request_type = recvbuf;
         request_path = strstr(recvbuf, " ");
@@ -273,49 +288,49 @@ static void* handle_http_request(void *argv)
             if (!request_path[0]) request_path = "index.html";
         }
 
-        parse_range_datasize(request_header, &partial, &range_start, &range_end, &datasize);
-        printf("request_type: %s, request_path: %s, url_args: %s, datasize: %d, request_data: %s\n", request_type, request_path, url_args, datasize, request_data); fflush(stdout);
+        parse_range_datasize(request_head, &partial, &range_start, &range_end, &range_size);
+//      printf("request_type: %s, request_path: %s, url_args: %s, range_size: %d, request_datasize: %d\n", request_type, request_path, url_args, range_size, request_datasize); fflush(stdout);
 
-        len = request_path ? strlen(request_path) : 0;
-        if (len > 4 && strcmp(request_path + len - 4, ".cgi") == 0) {
+        get_file_range_size(request_path, &range_start, &range_end, &range_size);
+        if (range_size == -1) { // 404
+            length = _snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head1, "404 Not Found", "text/html", strlen(g_404_page));
+//          printf("%s", sendbuf); fflush(stdout);
+            send(conn_fd, sendbuf, length, 0);
+            send(conn_fd, g_404_page, (int)strlen(g_404_page), 0);
+            goto _next;
+        } 
+
+        length = request_path ? (int)strlen(request_path) : 0;
+        if (length > 4 && strcmp(request_path + length - 4, ".cgi") == 0) {
             void *dl = NULL;
-            snprintf(cgibuf, sizeof(cgibuf), "./%s", request_path);
+            _snprintf(cgibuf, sizeof(cgibuf), "./%s", request_path);
             dl = dlopen(cgibuf, RTLD_LAZY);
-            if (!dl) {
-                send_404_page(conn_fd, sendbuf, sizeof(sendbuf));
-            } else {
+            if (dl) {
                 PFN_CGI_MAIN cgimain  = (PFN_CGI_MAIN)dlsym(dl, "cgimain");
                 int          pagesize = 0;
                 if (cgimain) {
-                    pagesize = cgimain(request_type, request_path, url_args, request_data, datasize, cgibuf, sizeof(cgibuf));
+                    strncpy(content_type, "text/html", sizeof(content_type));
+                    strncpy(cgibuf, "", sizeof(cgibuf));
+                    pagesize = cgimain(request_type, request_path, url_args, request_data, request_datasize, content_type, sizeof(content_type), cgibuf, sizeof(cgibuf));
                 }
                 dlclose(dl);
-                snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head1, "text/html", pagesize);
+                _snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head1, "200 OK", content_type, pagesize);
                 send(conn_fd, sendbuf, (int)strlen(sendbuf), 0);
                 send(conn_fd, cgibuf , pagesize, 0);
             }
-        } else {
-            if (strcmp(request_type, "GET") == 0 || strcmp(request_type, "HEAD") == 0) {
-                get_file_range_size(request_path, &range_start, &range_end, &datasize);
-                if (datasize == -1) {
-                    send_404_page(conn_fd, sendbuf, sizeof(sendbuf));
-                    goto _next;
-                }
-                if (!partial) {
-                    snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head1, get_content_type(request_path), datasize);
-                } else {
-                    snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head2, range_start, range_end, datasize, get_content_type(request_path), datasize ? range_end - range_start + 1 : 0);
-                }
-                printf("response:\n%s\n", sendbuf); fflush(stdout);
-                send(conn_fd, sendbuf, (int)strlen(sendbuf), 0);
-                if (strcmp(request_type, "GET") == 0) {
-                    send_file_data(conn_fd, request_path, range_start, range_end);
-                }
-            } else if (strcmp(request_type, "POST") == 0) {
-                snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head1, "text/plain", 0);
-                send(conn_fd, sendbuf, (int)strlen(sendbuf), 0);
+        } else if (strcmp(request_type, "GET") == 0 || strcmp(request_type, "HEAD") == 0) {
+            if (!partial) {
+                length = _snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head1, "200 OK", get_content_type(request_path), range_size);
+            } else {
+                length = _snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head2, range_start, range_end, range_size, get_content_type(request_path), range_size ? range_end - range_start + 1 : 0);
+            }
+//          printf("response:\n%s\n", sendbuf); fflush(stdout);
+            send(conn_fd, sendbuf, length, 0);
+            if (strcmp(request_type, "GET") == 0) {
+                send_file_data(conn_fd, request_path, range_start, range_end);
             }
         }
+
 _next:  closesocket(conn_fd);
     }
     return NULL;
