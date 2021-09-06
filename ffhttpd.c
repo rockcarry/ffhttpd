@@ -28,6 +28,7 @@ typedef int (*PFN_CGI_MAIN)(char *request_type, char *request_path, char *url_ar
 #include <netinet/in.h>
 #define  closesocket close
 #define  SOCKET      int
+#define _snprintf snprintf
 static char* strlwr(char *s)
 {
     char *p = s;
