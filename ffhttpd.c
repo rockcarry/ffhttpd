@@ -16,7 +16,6 @@ typedef int (*PFN_CGI_MAIN)(char *request_type, char *request_path, char *url_ar
 #pragma comment(lib, "ws2_32.lib")
 #pragma warning(disable:4996)
 #define strcasecmp _stricmp
-#define snprintf   _snprintf
 #endif
 #else
 #include <unistd.h>
@@ -28,15 +27,15 @@ typedef int (*PFN_CGI_MAIN)(char *request_type, char *request_path, char *url_ar
 #include <netinet/in.h>
 #define  closesocket close
 #define  SOCKET      int
-static char* strlwr(char *s)
+#endif
+
+static char* my_strlwr(char *s)
 {
     char *p = s;
     while (*p) { *p += *p > 'A' && *p < 'Z' ? 'a' - 'A' : 0; p ++; }
     return s;
 }
-#endif
 
-#define FFHTTPD_SERVER_PORT      8080
 #define FFHTTPD_MAX_CONNECTIONS  8
 #define FFHTTPD_MAX_WORK_THREADS FFHTTPD_MAX_CONNECTIONS
 
@@ -93,6 +92,10 @@ static char *g_content_type_list[][2] = {
     { NULL },
 };
 
+static char g_root_path[256] = ".";
+static int  g_server_port    = 8080;
+static int  g_exit_server    = 0;
+
 static char* get_content_type(char *file)
 {
     int   i;
@@ -110,7 +113,10 @@ static char* get_content_type(char *file)
 
 static void get_file_range_size(char *file, int *start, int *end, int *size)
 {
-    FILE *fp = fopen(file, "rb");
+    FILE *fp = NULL;
+    char  path[1024];
+    snprintf(path, sizeof(path), "%s/%s", g_root_path, file);
+    fp = fopen(path, "rb");
     if (fp) {
         fseek(fp, 0, SEEK_END);
         *size = ftell(fp);
@@ -125,7 +131,10 @@ static void get_file_range_size(char *file, int *start, int *end, int *size)
 
 static void send_file_data(SOCKET fd, char *file, int start, int end)
 {
-    FILE *fp = fopen(file, "rb");
+    FILE *fp = NULL;
+    char  path[1024];
+    snprintf(path, sizeof(path), "%s/%s", g_root_path, file);
+    fp = fopen(path, "rb");
     if (fp) {
         char buf[1024];
         int  len = end - start + 1, ret = 0, n;
@@ -196,11 +205,8 @@ static char* parse_params(const char *str, const char *key, char *val, int len)
     }
 
     for (i=0; i<len; i++) {
-        if (*p == '\\') {
-            p++;
-        } else if (*p == '\r' || *p == '\n') {
-            break;
-        }
+        if (*p == '\\') p++;
+        else if (*p == '\r' || *p == '\n') break;
         val[i] = *p++;
     }
     val[i] = val[len-1] = '\0';
@@ -264,7 +270,7 @@ static void* handle_http_request(void *argv)
         if (request_head) {
             request_head[0] = 0;
             request_head   += 2;
-            strlwr(request_head);
+            my_strlwr(request_head);
             request_data = strstr(request_head, "\r\n\r\n");
             if (request_data) {
                 request_data[0] = 0;
@@ -293,7 +299,7 @@ static void* handle_http_request(void *argv)
 
         get_file_range_size(request_path, &range_start, &range_end, &range_size);
         if (range_size == -1) { // 404
-            length = _snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head1, "404 Not Found", "text/html", strlen(g_404_page));
+            length = snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head1, "404 Not Found", "text/html", strlen(g_404_page));
 //          printf("%s", sendbuf); fflush(stdout);
             send(conn_fd, sendbuf, length, 0);
             send(conn_fd, g_404_page, (int)strlen(g_404_page), 0);
@@ -303,7 +309,7 @@ static void* handle_http_request(void *argv)
         length = request_path ? (int)strlen(request_path) : 0;
         if (length > 4 && strcmp(request_path + length - 4, ".cgi") == 0) {
             void *dl = NULL;
-            _snprintf(cgibuf, sizeof(cgibuf), "./%s", request_path);
+            snprintf(cgibuf, sizeof(cgibuf), "./%s", request_path);
             dl = dlopen(cgibuf, RTLD_LAZY);
             if (dl) {
                 PFN_CGI_MAIN cgimain  = (PFN_CGI_MAIN)dlsym(dl, "cgimain");
@@ -314,15 +320,15 @@ static void* handle_http_request(void *argv)
                     pagesize = cgimain(request_type, request_path, url_args, request_data, request_datasize, content_type, sizeof(content_type), cgibuf, sizeof(cgibuf));
                 }
                 dlclose(dl);
-                _snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head1, "200 OK", content_type, pagesize);
+                snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head1, "200 OK", content_type, pagesize);
                 send(conn_fd, sendbuf, (int)strlen(sendbuf), 0);
                 send(conn_fd, cgibuf , pagesize, 0);
             }
         } else if (strcmp(request_type, "GET") == 0 || strcmp(request_type, "HEAD") == 0) {
             if (!partial) {
-                length = _snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head1, "200 OK", get_content_type(request_path), range_size);
+                length = snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head1, "200 OK", get_content_type(request_path), range_size);
             } else {
-                length = _snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head2, range_start, range_end, range_size, get_content_type(request_path), range_size ? range_end - range_start + 1 : 0);
+                length = snprintf(sendbuf, sizeof(sendbuf), g_ffhttpd_head2, range_start, range_end, range_size, get_content_type(request_path), range_size ? range_end - range_start + 1 : 0);
             }
 //          printf("response:\n%s\n", sendbuf); fflush(stdout);
             send(conn_fd, sendbuf, length, 0);
@@ -357,7 +363,6 @@ static void threadpool_free(THEADPOOL *tp)
     pthread_cond_destroy (&tp->cond );
 }
 
-static int g_exit_server = 0;
 static void sig_handler(int sig)
 {
     struct sockaddr_in server_addr;
@@ -370,7 +375,7 @@ static void sig_handler(int sig)
         client_fd = socket(AF_INET, SOCK_STREAM, 0);
         if (client_fd != -1) {
             server_addr.sin_family      = AF_INET;
-            server_addr.sin_port        = htons(FFHTTPD_SERVER_PORT);
+            server_addr.sin_port        = htons(g_server_port);
             server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
             if (connect(client_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == 0) {
                 closesocket(client_fd);
@@ -380,12 +385,18 @@ static void sig_handler(int sig)
     }
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
     struct sockaddr_in server_addr, client_addr;
     SOCKET    server_fd, conn_fd;
-    int       addrlen = sizeof(client_addr);
+    int       addrlen = sizeof(client_addr), i;
     THEADPOOL thread_pool;
+
+    for (i=1; i<argc; i++) {
+        if      (strstr(argv[i], "--port=") == argv[i]) g_server_port = atoi(argv[i] + 7);
+        else if (strstr(argv[i], "--root=") == argv[i]) strncpy(g_root_path, argv[i] + 7, sizeof(g_root_path));
+    }
+    printf("port: %d, root: %s\n", g_server_port, g_root_path);
 
 #ifdef WIN32
     WSADATA wsaData;
@@ -398,7 +409,7 @@ int main(void)
     signal(SIGTERM, sig_handler);
 
     server_addr.sin_family      = AF_INET;
-    server_addr.sin_port        = htons(FFHTTPD_SERVER_PORT);
+    server_addr.sin_port        = htons(g_server_port);
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -406,12 +417,10 @@ int main(void)
         printf("failed to open socket !\n"); fflush(stdout);
         exit(1);
     }
-
     if (bind(server_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
         printf("failed to bind !\n"); fflush(stdout);
         exit(1);
     }
-
     if (listen(server_fd, FFHTTPD_MAX_CONNECTIONS) == -1) {
         printf("failed to listen !\n"); fflush(stdout);
         exit(1);
